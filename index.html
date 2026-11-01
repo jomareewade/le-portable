@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aurora Mobile – eSIM activation</title>
+  <meta name="description" content="Functional prototype of a three-step eSIM activation flow, using synthetic data.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- The screens are drawn into here by js/app.js -->
+  <main class="phone" id="app" data-screen="1"></main>
+
+  <!-- Test-data panel -->
+  <div id="demo"></div>
+
+  <noscript><p class="noscript">This prototype needs JavaScript turned on.</p></noscript>
+
+  <!-- type="module" lets the scripts import each other. It only works when the page is
+       served over http(s): use Live Server locally, or GitHub Pages. -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
