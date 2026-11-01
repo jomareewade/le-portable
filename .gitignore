@@ -1,0 +1,15 @@
+# Mac system files
+.DS_Store
+._*
+
+# Editor settings
+.vscode/
+*.swp
+
+# Secrets (for later, if you ever add API keys)
+.env
+.env.*
+
+# Packages and build output (for later, if you add npm or a build tool)
+node_modules/
+dist/
