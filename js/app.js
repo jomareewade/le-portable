@@ -85,7 +85,8 @@ function codeForTarget(target, s) {
 //  Rendering
 // =====================================================================
 
-const STEP_OF = { ready: 1, scan: 2, error: 2, success: 3 };
+const STEPS = ['Your phone', 'Your order', 'Scan', 'Done'];
+const STEP_OF = { phone: 1, order: 2, scan: 3, error: 3, success: 4 };
 
 function render(state, prev) {
   // Remember which field had focus so typing isn't interrupted by a redraw
@@ -95,18 +96,19 @@ function render(state, prev) {
 
   const entering = !prev || prev.screen !== state.screen;
   const step = STEP_OF[state.screen];
-  phoneEl.dataset.screen = step;
+  phoneEl.dataset.screen = state.screen;
 
-  const canGoBack = state.screen === 'scan' && state.scan.phase !== 'activating';
+  const canGoBack = (state.screen === 'order' || state.screen === 'scan') && state.scan.phase !== 'activating';
+  const backLabel = state.screen === 'order' ? 'Back to your phone' : 'Cancel scan and go back';
 
   phoneEl.innerHTML = `
     <header class="topbar">
-      ${canGoBack ? `<button class="icon-btn" data-action="back" aria-label="Cancel scan and go back">${ICON.back}</button>` : '<div class="spacer"></div>'}
+      ${canGoBack ? `<button class="icon-btn" data-action="back" aria-label="${backLabel}">${ICON.back}</button>` : '<div class="spacer"></div>'}
       ${LOGO}
-      <div class="step-count" aria-label="Step ${step} of 3">${step}/3</div>
+      <div class="spacer"></div>
     </header>
-    <div class="segments" aria-hidden="true"><div class="seg"></div><div class="seg"></div><div class="seg"></div></div>
-    ${{ ready: readyScreen, scan: scanScreen, error: errorScreen, success: successScreen }[state.screen](state, entering)}
+    ${progressBar(step, prev ? STEP_OF[prev.screen] : step)}
+    ${{ phone: phoneScreen, order: orderScreen, scan: scanScreen, error: errorScreen, success: successScreen }[state.screen](state, entering)}
   `;
 
   demoEl.innerHTML = demoPanel(state);
@@ -120,17 +122,32 @@ function render(state, prev) {
   }
 }
 
+// The bar is redrawn with each render, so when the step changes it starts at the
+// old fill and animates to the new one.
+function progressBar(step, fromStep) {
+  const total = STEPS.length;
+  const style = `--from: ${fromStep / total}; --to: ${step / total}`;
+  return `
+    <div class="progress">
+      <div class="progress-label" id="progress-label">Step ${step} of ${total} · ${STEPS[step - 1]}</div>
+      <div class="progress-track" role="progressbar" aria-labelledby="progress-label"
+        aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${step}">
+        <div class="progress-fill ${fromStep !== step ? 'grow' : ''}" style="${style}"></div>
+      </div>
+    </div>`;
+}
+
 // ---------- Step 1 ----------
-function readyScreen(s, entering) {
-  const count = selectors.readyCount(s);
-  const ready = selectors.allReady(s);
+function phoneScreen(s, entering) {
+  const count = selectors.phoneCount(s);
+  const ready = selectors.phoneReady(s);
 
   return `
   <section class="screen ${entering ? 'enter-up' : ''}">
     <div class="content">
       <div class="hero-icon">${ICON.sim}</div>
-      <h1>Get ready to activate your eSIM</h1>
-      <p class="lead">We'll check a few things so your Aurora Mobile eSIM sets up first time.</p>
+      <h1>Check your phone</h1>
+      <p class="lead">First, let's make sure your phone is ready for an Aurora Mobile eSIM.</p>
 
       <div class="card checklist">
         ${s.imei.status === 'ok'
@@ -141,14 +158,6 @@ function readyScreen(s, entering) {
               label: 'IMEI', placeholder: '15 digits', inputmode: 'numeric', field: s.imei, button: 'Check',
             })}
 
-        ${s.order.status === 'ok'
-          ? doneItem(`Order ${esc(s.order.data.orderNo)}`, `${esc(s.order.data.name)} · ${esc(s.order.data.plan)} · ${formatMobile(s.order.data.number)}`, 'order-edit')
-          : formItem({
-              key: 'order', title: 'Find your order',
-              help: "It's in your confirmation email, like AUR-123456.",
-              label: 'Order number', placeholder: 'AUR-123456', inputmode: 'text', field: s.order, button: 'Find',
-            })}
-
         <div class="item">
           ${statusMark(s.online ? 'ok' : 'error')}
           <div class="item-text">
@@ -156,6 +165,40 @@ function readyScreen(s, entering) {
             <span class="item-help">${s.online ? 'Wi-Fi is best for downloading your eSIM.' : 'Connect to Wi-Fi to download your eSIM.'}</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="ready-label" aria-live="polite">${ready ? 'Your phone is ready' : `${count} of 2 ready`}</div>
+      <button class="primary-btn" data-action="next" ${ready ? '' : 'disabled'}>Continue</button>
+    </div>
+  </section>`;
+}
+
+// ---------- Step 2 ----------
+function orderScreen(s, entering) {
+  const count = selectors.orderCount(s);
+  const ready = selectors.allReady(s);
+  // The phone screen's items can change after leaving it (going offline), so say why scanning is blocked
+  const label = ready ? 'All set. Ready to scan'
+    : selectors.orderReady(s) && !s.online ? "You're offline. Connect to Wi-Fi to continue"
+    : `${count} of 2 ready`;
+
+  return `
+  <section class="screen ${entering ? 'enter-up' : ''}">
+    <div class="content">
+      <div class="hero-icon">${ICON.sim}</div>
+      <h1>Find your order</h1>
+      <p class="lead">Now let's match your phone to your Aurora Mobile order.</p>
+
+      <div class="card checklist">
+        ${s.order.status === 'ok'
+          ? doneItem(`Order ${esc(s.order.data.orderNo)}`, `${esc(s.order.data.name)} · ${esc(s.order.data.plan)} · ${formatMobile(s.order.data.number)}`, 'order-edit')
+          : formItem({
+              key: 'order', title: 'Find your order',
+              help: "It's in your confirmation email, like AUR-123456.",
+              label: 'Order number', placeholder: 'AUR-123456', inputmode: 'text', field: s.order, button: 'Find',
+            })}
 
         <button class="item item-btn" role="checkbox" aria-checked="${s.keepSim}" data-action="keepSim">
           ${statusMark(s.keepSim ? 'ok' : 'idle')}
@@ -168,7 +211,7 @@ function readyScreen(s, entering) {
     </div>
 
     <div class="footer">
-      <div class="ready-label" aria-live="polite">${ready ? 'All set. Ready to scan' : `${count} of 4 ready`}</div>
+      <div class="ready-label" aria-live="polite">${label}</div>
       <button class="primary-btn" data-action="start-scan" ${ready ? '' : 'disabled'}>Scan QR code</button>
     </div>
   </section>`;
@@ -213,7 +256,7 @@ function formItem({ key, title, help, label, placeholder, inputmode, field, butt
     </form>`;
 }
 
-// ---------- Step 2 ----------
+// ---------- Step 3 ----------
 function scanScreen(s, entering) {
   const { phase, target, hint, activationStep } = s.scan;
   const code = phase === 'aim' && target === 'blurry' ? { matchingId: 'blur' } : (lastCode || codeForTarget(target, s) || { matchingId: 'x' });
@@ -304,12 +347,12 @@ function errorScreen(s, entering) {
     </div>
     <div class="footer">
       <button class="primary-btn" data-action="${copy.primary[0]}">${copy.primary[1]}</button>
-      <button class="secondary-btn" data-action="back">Back to checklist</button>
+      <button class="secondary-btn" data-action="back">Back to your order</button>
     </div>
   </section>`;
 }
 
-// ---------- Step 3 ----------
+// ---------- Step 4 ----------
 function successScreen(s) {
   const r = s.result;
   const when = new Date(r.activatedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
@@ -408,7 +451,6 @@ async function submitImei() {
   try {
     const device = await api.checkDevice(value);
     dispatch({ type: 'imei/ok', device });
-    if (getState().order.status !== 'ok') focusField('order-input');
   } catch (err) {
     dispatch({ type: 'imei/invalid', error: err.message });
     focusField('imei-input');
@@ -428,7 +470,7 @@ async function submitOrder() {
   }
 }
 
-// Step 2: "look" through the camera until a readable code appears
+// Step 3: "look" through the camera until a readable code appears
 function startScan(opts = {}) {
   stopScan();
   lastCode = null;
@@ -523,7 +565,9 @@ function retry() {
 function useSample(kind, value) {
   stopScan();
   const s = getState();
-  if (s.screen !== 'ready') dispatch({ type: 'flow/back' });
+  // Open the screen that holds this field
+  const screen = kind === 'imei' ? 'phone' : 'order';
+  if (s.screen !== screen) dispatch({ type: 'flow/goto', screen });
   dispatch({ type: 'demo/open', value: false });
   if (s[kind].status === 'ok') dispatch({ type: `${kind}/edit` });
   dispatch({ type: `${kind}/input`, value });
@@ -542,6 +586,7 @@ document.addEventListener('click', (e) => {
     case 'imei-edit':    dispatch({ type: 'imei/edit' }); focusField('imei-input'); break;
     case 'order-edit':   dispatch({ type: 'order/edit' }); focusField('order-input'); break;
     case 'keepSim':      dispatch({ type: 'keepSim/toggle' }); break;
+    case 'next':         if (selectors.phoneReady(getState())) dispatch({ type: 'flow/goto', screen: 'order' }); break;
     case 'start-scan':   if (selectors.allReady(getState())) startScan({ target: 'own' }); break;
     case 'back':         stopScan(); dispatch({ type: 'flow/back' }); break;
     case 'manual-open':  stopScan(); dispatch({ type: 'scan/manualOpen', value: true }); focusField('manual-input'); break;

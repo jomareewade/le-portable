@@ -6,15 +6,15 @@
 const SESSION_KEY = 'aurora-esim-session';
 
 export const initialState = {
-  screen: 'ready',                    // 'ready' | 'scan' | 'error' | 'success'
+  screen: 'phone',                    // 'phone' | 'order' | 'scan' | 'error' | 'success'
 
-  // Step 1 – checklist
+  // Steps 1 and 2 – checklist (phone screen: imei, online · order screen: order, keepSim)
   imei:  { input: '', status: 'idle', error: null, device: null },   // status: idle | checking | ok | error
   order: { input: '', status: 'idle', error: null, data: null },
   online: true,
   keepSim: false,
 
-  // Step 2 – scanning and activation
+  // Step 3 – scanning and activation
   scan: {
     phase: 'aim',                     // aim | locked | activating
     target: 'own',                    // what the simulated camera is pointed at
@@ -92,8 +92,10 @@ export function reducer(state, action) {
 
     case 'notice/clear':
       return { ...state, notice: null };
+    case 'flow/goto':
+      return { ...state, screen: action.screen, error: null, scan: initialState.scan };
     case 'flow/back':
-      return { ...state, screen: 'ready', error: null, scan: initialState.scan };
+      return { ...state, screen: state.screen === 'order' ? 'phone' : 'order', error: null, scan: initialState.scan };
     case 'flow/reset':
       return { ...initialState, online: state.online, demo: { ...state.demo, open: false } };
 
@@ -129,10 +131,11 @@ export function createStore() {
   };
 }
 
-// Keep step-1 progress if the page is refreshed. A refresh mid-scan goes back
-// to the checklist, the same way a real app would after being closed.
+// Keep checklist progress if the page is refreshed. A refresh mid-scan goes back
+// to the order screen, the same way a real app would after being closed.
 function saveSession(state) {
   const keep = {
+    screen: state.screen === 'phone' ? 'phone' : 'order',
     imei: state.imei.status === 'checking' ? { ...state.imei, status: 'idle' } : state.imei,
     order: state.order.status === 'checking' ? { ...state.order, status: 'idle' } : state.order,
     keepSim: state.keepSim,
@@ -144,7 +147,8 @@ function saveSession(state) {
 function restoreSession() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY));
-    if (saved) return { ...initialState, ...saved };
+    // Sessions saved before the checklist was split have no screen, so they start at 'phone'
+    if (saved) return { ...initialState, ...saved, screen: saved.screen === 'order' ? 'order' : 'phone' };
   } catch { /* ignore */ }
   return initialState;
 }
@@ -155,6 +159,9 @@ export function clearSession() {
 
 // Derived values: worked out from state rather than stored
 export const selectors = {
-  readyCount: (s) => [s.imei.status === 'ok', s.order.status === 'ok', s.online, s.keepSim].filter(Boolean).length,
-  allReady: (s) => selectors.readyCount(s) === 4,
+  phoneCount: (s) => [s.imei.status === 'ok', s.online].filter(Boolean).length,
+  orderCount: (s) => [s.order.status === 'ok', s.keepSim].filter(Boolean).length,
+  phoneReady: (s) => selectors.phoneCount(s) === 2,
+  orderReady: (s) => selectors.orderCount(s) === 2,
+  allReady: (s) => selectors.phoneReady(s) && selectors.orderReady(s),
 };

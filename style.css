@@ -94,13 +94,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .spacer { width: 44px; height: 44px; }
 .logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 800; letter-spacing: -.035em; white-space: nowrap; }
 .brand { color: var(--brand); }
-.step-count { width: 44px; text-align: right; font-size: 13px; font-weight: 800; color: var(--muted); }
 
-.segments { display: flex; gap: 6px; padding: 8px 24px 0; flex: none; }
-.seg { flex: 1; height: 4px; border-radius: 2px; background: var(--seg-off); transition: background .3s; }
-.phone[data-screen="1"] .seg:nth-child(-n+1),
-.phone[data-screen="2"] .seg:nth-child(-n+2),
-.phone[data-screen="3"] .seg { background: var(--brand); }
+.progress { padding: 8px 24px 0; flex: none; }
+.progress-label { font-size: 13px; font-weight: 800; color: var(--muted); margin-bottom: 8px; }
+.progress-track { height: 6px; border-radius: 3px; background: var(--seg-off); overflow: hidden; }
+.progress-fill {
+  height: 100%; border-radius: 3px; background: var(--brand);
+  transform-origin: left; transform: scaleX(var(--to));
+}
+.progress-fill.grow { animation: grow .5s cubic-bezier(.3, .7, .3, 1) both; }
+@keyframes grow { from { transform: scaleX(var(--from)); } to { transform: scaleX(var(--to)); } }
+@media (prefers-reduced-motion: reduce) { .progress-fill.grow { animation: none; } }
 
 /* ===== Shared layout ===== */
 .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
